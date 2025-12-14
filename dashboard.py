@@ -7,13 +7,54 @@ app = Flask(__name__)
 DB = "botdata.db"
 ADMIN_PASSWORD = "Mohammed@7756"
 
+# ===============================
+# AUTO-CREATE DATABASE AND TABLES
+# ===============================
+def init_db():
+    conn = sqlite3.connect(DB)
+    cursor = conn.cursor()
+    # Users table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            user_id INTEGER PRIMARY KEY,
+            username TEXT,
+            balance REAL DEFAULT 0
+        )
+    """)
+    # Topup requests table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS topup_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            username TEXT,
+            amount REAL,
+            status TEXT DEFAULT 'pending'
+        )
+    """)
+    # Products table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS products (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT,
+            price REAL
+        )
+    """)
+    conn.commit()
+    conn.close()
 
+init_db()  # call once on start
+
+# ===============================
+# DATABASE HELPER
+# ===============================
 def get_db():
     conn = sqlite3.connect(DB)
     conn.row_factory = sqlite3.Row
     return conn
 
-
+# ===============================
+# LOGIN PAGE
+# ===============================
 @app.route("/", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
@@ -30,7 +71,9 @@ def login():
     </form>
     """
 
-
+# ===============================
+# TOP-UP REQUESTS
+# ===============================
 @app.route("/topups")
 def topups():
     db = get_db()
@@ -72,7 +115,9 @@ def topups():
     """
     return html
 
-
+# ===============================
+# APPROVE / REJECT
+# ===============================
 @app.route("/approve/<int:rid>")
 def approve(rid):
     db = get_db()
@@ -107,7 +152,9 @@ def reject(rid):
     db.close()
     return redirect("/topups")
 
-
+# ===============================
+# PRODUCTS / SERVICES
+# ===============================
 @app.route("/products", methods=["GET", "POST"])
 def products():
     db = get_db()
@@ -161,7 +208,6 @@ def products():
     """
     return html
 
-
 @app.route("/delete/<int:pid>")
 def delete(pid):
     db = get_db()
@@ -170,7 +216,9 @@ def delete(pid):
     db.close()
     return redirect("/products")
 
-
+# ===============================
+# RUN SERVER
+# ===============================
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
