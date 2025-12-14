@@ -1,5 +1,6 @@
 import os
-import sqlite3
+import psycopg2
+from psycopg2.extras import RealDictCursor
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils import executor
@@ -10,15 +11,10 @@ ADMIN_USERNAME = "MD18073"  # Without @
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(bot)
 
-# Use the same database as dashboard
-DB = os.path.join(os.getcwd(), "botdata.db")
+DATABASE_URL = os.environ.get("DATABASE_URL")
 
-# ===============================
-# DATABASE HELPER
-# ===============================
 def get_db():
-    conn = sqlite3.connect(DB)
-    conn.row_factory = sqlite3.Row
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
     return conn
 
 # ===============================
@@ -43,32 +39,24 @@ async def choose_language(callback_query: types.CallbackQuery):
     keyboard = InlineKeyboardMarkup()
 
     # Admin menu
-    if message_is_admin(callback_query.from_user.username):
-        keyboard.add(
-            InlineKeyboardButton("Admin Panel", callback_data="admin_panel")
-        )
+    if callback_query.from_user.username == ADMIN_USERNAME:
+        keyboard.add(InlineKeyboardButton("Admin Panel", callback_data="admin_panel"))
 
     # User menu
-    keyboard.add(
-        InlineKeyboardButton("Show Services", callback_data="show_services")
-    )
+    keyboard.add(InlineKeyboardButton("Show Services", callback_data="show_services"))
 
     await bot.send_message(callback_query.from_user.id, "Main menu:", reply_markup=keyboard)
     await callback_query.answer()
 
 # ===============================
-# ADMIN CHECK
-# ===============================
-def message_is_admin(username):
-    return username == ADMIN_USERNAME
-
-# ===============================
 # SHOW SERVICES
 # ===============================
 def get_services_keyboard():
-    db = get_db()
-    rows = db.execute("SELECT * FROM products").fetchall()
-    db.close()
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM products")
+    rows = cur.fetchall()
+    conn.close()
 
     buttons = []
     for r in rows:
@@ -90,9 +78,11 @@ async def show_services(callback_query: types.CallbackQuery):
 @dp.callback_query_handler(lambda c: c.data.startswith("buy_"))
 async def buy_service(callback_query: types.CallbackQuery):
     service_id = int(callback_query.data.split("_")[1])
-    db = get_db()
-    service = db.execute("SELECT * FROM products WHERE id=?", (service_id,)).fetchone()
-    db.close()
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM products WHERE id=%s", (service_id,))
+    service = cur.fetchone()
+    conn.close()
 
     if service:
         await bot.send_message(callback_query.from_user.id, f"You selected: {service['name']} - ${service['price']}")
@@ -105,7 +95,7 @@ async def buy_service(callback_query: types.CallbackQuery):
 # ===============================
 @dp.callback_query_handler(lambda c: c.data == "admin_panel")
 async def admin_panel(callback_query: types.CallbackQuery):
-    if message_is_admin(callback_query.from_user.username):
+    if callback_query.from_user.username == ADMIN_USERNAME:
         await bot.send_message(callback_query.from_user.id, "Admin panel features coming soon!")
     else:
         await bot.send_message(callback_query.from_user.id, "❌ You are not an admin.")
@@ -115,5 +105,4 @@ async def admin_panel(callback_query: types.CallbackQuery):
 # RUN BOT
 # ===============================
 if __name__ == "__main__":
-    from aiogram import executor
     executor.start_polling(dp, skip_updates=True)
